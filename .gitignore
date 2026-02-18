@@ -1,0 +1,30 @@
+# Build artifacts
+*.o
+*.so
+*.bc
+*.a
+*.pc
+*.dll
+*.dylib
+
+# PGXS build
+results/
+regression.diffs
+regression.out
+tmp_check/
+log/
+
+# Assembled SQL (auto-generated from sql/parts/)
+pg_fsql--*.sql
+
+# Distribution archives
+*.tar.gz
+*.zip
+
+# Editor / OS
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/
+.idea/

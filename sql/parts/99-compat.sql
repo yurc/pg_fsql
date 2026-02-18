@@ -1,0 +1,25 @@
+-- ============================================================
+-- 99-compat.sql  —  Compatibility note
+-- ============================================================
+-- Migration from data_algorithms is done OUTSIDE of CREATE EXTENSION.
+-- See test/sql/05-migration.sql for the migration script.
+--
+-- Wrapper functions for backward compatibility:
+--
+--   CREATE OR REPLACE FUNCTION data_algorithms.f_template_load_sql(
+--       _template text, _data jsonb
+--   ) RETURNS text LANGUAGE sql STABLE AS $$
+--       SELECT fsql._c_render(_template, _data);
+--   $$;
+--
+--   CREATE OR REPLACE FUNCTION data_algorithms.f_exetempl_sql(
+--       _templ text, _jsonb jsonb DEFAULT '{}'
+--   ) RETURNS jsonb LANGUAGE sql VOLATILE AS $$
+--       SELECT fsql._exec_templ(_templ, _jsonb);
+--   $$;
+--
+--   CREATE OR REPLACE FUNCTION data_algorithms.f_sql(
+--       _path text, _jdata jsonb DEFAULT '{}', _debug boolean DEFAULT false
+--   ) RETURNS SETOF jsonb LANGUAGE sql VOLATILE AS $$
+--       SELECT fsql._process(_path, _jdata, _debug, 0);
+--   $$;

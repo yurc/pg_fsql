@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 — 2026-02-19
+
+### Added
+- `{d[key]!j}` format — jsonb literal substitution: `'<value>'::jsonb` (strings auto-quoted, objects/arrays pass through)
+- `{d[key]!i}` format — `quote_identifier` substitution for safe SQL identifiers (reserved words get quoted)
+- `_self` virtual key — injects the full input JSON when `{d[_self]}` or `{d[_self]!j}` appears in template body
+- `render()` now executes children via `_process` — dry-run resolves child dependencies before rendering parent SQL
+- REST CRUD test (`07-rest-crud.sql`) — demonstrates dynamic UPDATE with `_self!j` + `jsonb_populate_record`
+
+### Fixed
+- `validate()` orphan check now correctly scopes to fragments (`cmd IS NULL`) only
+
 ## 1.0.0 — 2026-02-18
 
 ### Added

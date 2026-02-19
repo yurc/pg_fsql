@@ -6,7 +6,7 @@ Hierarchical template composition and execution — pure C + PL/pgSQL, no plpyth
 
 ## Features
 
-- **C renderer** — fast `{d[key]}` / `{d[key]!r}` placeholder substitution
+- **C renderer** — fast `{d[key]}` / `{d[key]!r}` / `{d[key]!j}` / `{d[key]!i}` placeholder substitution
 - **SPI plan cache** — optional per-template prepared plan caching
 - **Recursive engine** — hierarchical dot-path templates with parent-child composition
 - **6 cmd types** — `exec`, `ref`, `if`, `exec_tpl`, `map`, `NULL`
@@ -129,6 +129,10 @@ Child values merge into parent data as `{d[child_name]}`.
 |--------|----------|
 | `{d[key]}` | Replace with value (`NULL` → `null`) |
 | `{d[key]!r}` | Replace with `quote_literal(value)` (`NULL` → `''`) |
+| `{d[key]!j}` | jsonb literal: `'<value>'::jsonb` (strings auto-quoted, objects/arrays pass through) |
+| `{d[key]!i}` | `quote_identifier(value)` — safe SQL identifier (`order` → `"order"`, `name` → `name`) |
+
+**Virtual key `_self`** — full input JSON object, injected automatically when `{d[_self]}` or `{d[_self]!j}` appears in template body. Useful for passing the entire input payload as jsonb.
 
 Values containing `{d[...]}` are substituted first (nested expansion).
 
@@ -221,6 +225,49 @@ SELECT fsql.run('report', '{"city":"Moscow"}', true);
 -- NOTICE:    exec → SELECT ...
 -- NOTICE:    result → {"data": [...]}
 ```
+
+### REST CRUD with `_self!j`
+
+Dynamic UPDATE that handles any subset of columns — the key use-case for `!j` and `_self`:
+
+```sql
+-- PUT: update only supplied columns via jsonb_populate_record
+INSERT INTO fsql.templates (path, cmd, body) VALUES
+('rest.put', 'exec',
+ 'UPDATE {d[tbl]} SET ({d[columns]}) = (
+    SELECT {d[columns]} FROM (
+      SELECT (jsonb_populate_record(null::{d[tbl]}, {d[_self]!j} - ''id'')).*
+    ) sub
+  ) WHERE id = {d[id]}
+  RETURNING jsonb_build_object(''id'', id)');
+
+-- Child: dynamically intersect input keys with table columns (cmd=exec)
+INSERT INTO fsql.templates (path, cmd, body) VALUES
+('rest.put.columns', 'exec',
+ 'SELECT jsonb_build_object(''columns'',
+    string_agg(c.column_name, '','' ORDER BY c.ordinal_position))
+  FROM information_schema.columns c
+  WHERE c.table_schema || ''.'' || c.table_name = {d[tbl]!r}
+    AND c.column_name != ''id''
+    AND {d[_self]!j} ? c.column_name');
+
+-- Usage:
+SELECT fsql.run('rest.put',
+    '{"tbl":"myschema.orders","id":42,"price":19.99,"qty":5}');
+-- {d[_self]!j} → '{"tbl":"myschema.orders","id":42,"price":19.99,"qty":5}'::jsonb
+-- rest.put.columns resolves → "price,qty" (only supplied keys)
+-- jsonb_populate_record fills a typed record from the input JSON
+
+-- Preview the generated SQL:
+SELECT fsql.render('rest.put',
+    '{"tbl":"myschema.orders","id":42,"price":19.99,"qty":5}');
+```
+
+How it works:
+- `{d[_self]!j}` injects the full input JSON as a `'...'::jsonb` literal
+- Child `rest.put.columns` (`cmd=exec`) queries `information_schema` to find which input keys match actual table columns — `render()` executes children via `_process`
+- `jsonb_populate_record` casts the JSON into a proper row type, so PostgreSQL handles type conversion
+- Result: one template set serves UPDATE for **any** table with **any** subset of columns
 
 ## Configuration
 
@@ -353,7 +400,9 @@ psql -d test_db -f test/sql/00-seed.sql
 psql -d test_db -f test/sql/01-render.sql
 psql -d test_db -f test/sql/02-process.sql
 psql -d test_db -f test/sql/03-render-tree-validate.sql
+psql -d test_db -f test/sql/05-gen-select.sql
 psql -d test_db -f test/sql/06-cache.sql
+psql -d test_db -f test/sql/07-rest-crud.sql
 
 # Or use the runner
 cd test && bash run_tests.sh
@@ -389,8 +438,9 @@ pg_fsql/
 │       ├── 02-process.sql   _process + run tests
 │       ├── 03-render-tree-validate.sql
 │       ├── 04-migration.sql data_algorithms migration
-│       ├── 05-gen-select.sql
-│       └── 06-cache.sql     SPI plan cache tests
+│       ├── 05-gen-select.sql  generic SELECT builder
+│       ├── 06-cache.sql     SPI plan cache tests
+│       └── 07-rest-crud.sql REST CRUD with _self!j
 ├── Makefile
 ├── pg_fsql.control
 ├── CHANGELOG.md

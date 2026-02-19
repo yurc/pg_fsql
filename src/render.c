@@ -8,6 +8,7 @@
  *   {d[key]}   — plain substitution (NULL → "null")
  *   {d[key]!r} — quote_literal substitution (NULL → '')
  *   {d[key]!j} — jsonb literal: '<json_value>'::jsonb
+ *   {d[key]!i} — quote_identifier substitution (reserved words → "word")
  *
  * Sorting: values that themselves contain "{d[" are substituted first,
  * so nested patterns from substituted values can be resolved.
@@ -270,6 +271,7 @@ fsql_c_render(PG_FUNCTION_ARGS)
         int   key_len = strlen(pairs[i].key);
         char *pat_r;    /* {d[key]!r} */
         char *pat_j;    /* {d[key]!j} */
+        char *pat_i;    /* {d[key]!i} */
         char *pat;      /* {d[key]}   */
 
         pat_r = palloc(key_len + 8);   /* {d[...]!r}\0  = 3+key+4+1 */
@@ -277,6 +279,9 @@ fsql_c_render(PG_FUNCTION_ARGS)
 
         pat_j = palloc(key_len + 8);   /* {d[...]!j}\0  = 3+key+4+1 */
         sprintf(pat_j, "{d[%s]!j}", pairs[i].key);
+
+        pat_i = palloc(key_len + 8);   /* {d[...]!i}\0  = 3+key+4+1 */
+        sprintf(pat_i, "{d[%s]!i}", pairs[i].key);
 
         pat = palloc(key_len + 6);     /* {d[...]}\0   = 3+key+2+1 */
         sprintf(pat, "{d[%s]}", pairs[i].key);
@@ -327,6 +332,16 @@ fsql_c_render(PG_FUNCTION_ARGS)
             result = new_result;
         }
 
+        /* !i pattern → quote_identifier */
+        if (strstr(result, pat_i))
+        {
+            const char *raw = pairs[i].is_null ? "" : pairs[i].value;
+            const char *quoted = quote_identifier(raw);
+            char *new_result = str_replace_all(result, pat_i, quoted);
+            pfree(result);
+            result = new_result;
+        }
+
         /* Plain pattern */
         if (strstr(result, pat))
         {
@@ -338,6 +353,7 @@ fsql_c_render(PG_FUNCTION_ARGS)
 
         pfree(pat_r);
         pfree(pat_j);
+        pfree(pat_i);
         pfree(pat);
     }
 

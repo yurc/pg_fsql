@@ -76,12 +76,13 @@ BEGIN
         END;
     END LOOP;
 
-    /* 6. Orphan children */
+    /* 6. Orphan children (only fragments — cmd IS NULL) */
     FOR _r IN
         SELECT c.path,
                regexp_replace(c.path, '\.[^.]+$', '') AS parent_path
         FROM   fsql.templates c
         WHERE  c.path LIKE '%.%'
+          AND  c.cmd IS NULL
           AND  NOT EXISTS (
               SELECT 1 FROM fsql.templates p
               WHERE  p.path = regexp_replace(c.path, '\.[^.]+$', ''))

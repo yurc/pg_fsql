@@ -13,7 +13,6 @@ Hierarchical template composition and execution — pure C + PL/pgSQL, no plpyth
 - **Safe execution** — parameterized queries via `fsql.params` type catalog
 - **No superuser** — `superuser = false`, safe for shared hosting
 - **Debug trace** — `RAISE NOTICE` logging with `_debug = true`
-- **Legacy compatible** — old `data_algorithms` names still work
 
 ## Quick Start
 
@@ -106,8 +105,6 @@ fsql.params (
 | `if` | Conditional branch — evaluate body, pick child by result | SQL returning branch name |
 | `exec_tpl` | Execute SQL, then re-render result as template | SQL |
 | `map` | Collect children into JSON object | Template body |
-
-Legacy aliases: `exejson` = `exec`, `templ` = `ref`, `json` = `map`, `exejsontp` = `exec_tpl`
 
 ## Template Hierarchy
 
@@ -368,30 +365,6 @@ SET fsql.cache_plans = false;
 - After modifying `body` of templates with `cached = true`
 - On suspected stale plan (unexpectedly slow query)
 
-## Migration from data_algorithms
-
-```sql
--- Copy templates
-INSERT INTO fsql.templates (path, cmd, body, defaults)
-SELECT path, cmd, stempl, mask_before
-FROM   data_algorithms.c_sql_templ
-WHERE  path IS NOT NULL
-ON CONFLICT (path) DO UPDATE SET
-    cmd = EXCLUDED.cmd, body = EXCLUDED.body, defaults = EXCLUDED.defaults;
-
--- Copy params
-INSERT INTO fsql.params (key_param, type_param)
-SELECT key_param, type_param FROM data_algorithms.c_params
-ON CONFLICT (key_param) DO UPDATE SET type_param = EXCLUDED.type_param;
-
--- Optional: compatibility wrappers
-CREATE FUNCTION data_algorithms.f_template_load_sql(_t text, _d jsonb)
-RETURNS text LANGUAGE sql STABLE AS $$ SELECT fsql._c_render(_t, _d) $$;
-
-CREATE FUNCTION data_algorithms.f_sql(_p text, _d jsonb DEFAULT '{}', _dbg boolean DEFAULT false)
-RETURNS SETOF jsonb LANGUAGE sql VOLATILE AS $$ SELECT fsql._process(_p, _d, _dbg, 0) $$;
-```
-
 ## Testing
 
 ```bash
@@ -428,8 +401,7 @@ pg_fsql/
 │   ├── 08-tree.sql          tree visualization
 │   ├── 09-explain.sql       expansion trace
 │   ├── 10-validate.sql      template validation
-│   ├── 11-depends-on.sql    dependency analysis
-│   └── 99-compat.sql        migration notes
+│   └── 11-depends-on.sql    dependency analysis
 ├── test/
 │   ├── run_tests.sh         test runner
 │   └── sql/

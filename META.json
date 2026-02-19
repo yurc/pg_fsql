@@ -1,0 +1,48 @@
+{
+  "name": "pg_fsql",
+  "abstract": "Recursive SQL template engine for PostgreSQL",
+  "description": "Hierarchical template composition and execution — pure C + PL/pgSQL. Dot-path template trees, 6 command types (exec, ref, if, exec_tpl, map, NULL), SPI plan caching, jsonb in/out, {d[key]} / !r / !j / !i placeholder formats, _self virtual key. No plpython3u, no superuser required.",
+  "version": "1.1.0",
+  "maintainer": "Yuri K. <yurc@users.noreply.github.com>",
+  "license": "postgresql",
+  "provides": {
+    "pg_fsql": {
+      "abstract": "Recursive SQL template engine",
+      "file": "pg_fsql--1.0.sql",
+      "version": "1.1.0"
+    }
+  },
+  "prereqs": {
+    "runtime": {
+      "requires": {
+        "PostgreSQL": "14.0.0",
+        "plpgsql": "0"
+      }
+    }
+  },
+  "resources": {
+    "bugtracker": {
+      "web": "https://github.com/yurc/pg_fsql/issues"
+    },
+    "repository": {
+      "url": "https://github.com/yurc/pg_fsql.git",
+      "web": "https://github.com/yurc/pg_fsql",
+      "type": "git"
+    }
+  },
+  "tags": [
+    "sql",
+    "template",
+    "recursive",
+    "jsonb",
+    "etl",
+    "dynamic-sql",
+    "query-builder"
+  ],
+  "release_status": "stable",
+  "generated_by": "hand",
+  "meta-spec": {
+    "version": "1.0.0",
+    "url": "https://pgxn.org/meta/spec.txt"
+  }
+}

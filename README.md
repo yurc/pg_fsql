@@ -442,6 +442,7 @@ pg_fsql/
 │       ├── 06-cache.sql     SPI plan cache tests
 │       └── 07-rest-crud.sql REST CRUD with _self!j
 ├── Makefile
+├── META.json              PGXN distribution metadata
 ├── pg_fsql.control
 ├── CHANGELOG.md
 ├── LICENSE

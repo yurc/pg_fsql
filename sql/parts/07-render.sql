@@ -1,5 +1,9 @@
 -- ============================================================
--- 07-render.sql  —  Dry-run rendering (no execution)
+-- 07-render.sql  —  Dry-run: execute children, render parent
+-- ============================================================
+-- render = "покажи SQL который run выполнил бы"
+-- Children с cmd=exec выполняются (нужны реальные данные),
+-- но сам parent только рендерится в текст, без EXECUTE.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION fsql.render(
@@ -7,15 +11,16 @@ CREATE OR REPLACE FUNCTION fsql.render(
     _data  jsonb DEFAULT '{}'::jsonb
 ) RETURNS text
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 AS $$
 DECLARE
     _t       record;
     _r       record;
     _jchild  jsonb := '{}'::jsonb;
-    _tmp     text;
+    _tmp     jsonb;
+    _cmd     text;
 BEGIN
-    SELECT path, cmd, body, defaults,
+    SELECT path, cmd, body, defaults, cached,
            coalesce(defaults, '{}')::jsonb || _data AS jdata
     FROM   fsql.templates
     WHERE  path = _path
@@ -25,7 +30,23 @@ BEGIN
         RAISE EXCEPTION 'Template not found: %', _path;
     END IF;
 
-    /* Recursively render children as text and merge into data */
+    /* ---- normalize legacy cmd aliases ---- */
+    _cmd := CASE _t.cmd
+        WHEN 'exejson'   THEN 'exec'
+        WHEN 'exejsontp' THEN 'exec_tpl'
+        WHEN 'templ'     THEN 'ref'
+        WHEN 'templ_key' THEN 'ref'
+        WHEN 'json'      THEN 'map'
+        WHEN 'array'     THEN 'map'
+        ELSE _t.cmd
+    END;
+
+    /* ---- ref: follow redirect, render target ---- */
+    IF _cmd = 'ref' THEN
+        RETURN fsql.render(_t.body, _t.jdata);
+    END IF;
+
+    /* ---- execute children via _process (real data!) ---- */
     FOR _r IN
         SELECT *
         FROM   fsql.templates
@@ -33,19 +54,37 @@ BEGIN
           AND  SPLIT_PART(replace(path, _path, ''), '.', 3) = ''
         ORDER  BY path
     LOOP
-        _tmp := fsql.render(
+        _tmp := fsql._process(
             _r.path,
-            _t.jdata || coalesce(_r.defaults, '{}')::jsonb);
-        _jchild := _jchild || jsonb_build_object(
-            SPLIT_PART(_r.path::text, '.', -1), _tmp);
+            _t.jdata || coalesce(_r.defaults, '{}')::jsonb,
+            false,
+            1
+        );
+
+        _jchild := _jchild ||
+            CASE
+                WHEN _r.cmd IS NULL THEN
+                    jsonb_build_object(
+                        SPLIT_PART(_r.path::text, '.', -1),
+                        _tmp ->> 'key')
+                WHEN _r.cmd IN ('map', 'json', 'array') THEN
+                    jsonb_build_object(
+                        SPLIT_PART(_r.path::text, '.', -1),
+                        _tmp || coalesce(_r.defaults, '{}')::jsonb)
+                WHEN jsonb_typeof(_tmp) = 'object' THEN
+                    fsql._c_render(
+                        _tmp::text,
+                        _t.jdata || coalesce(_r.defaults, '{}')::jsonb
+                    )::jsonb
+                ELSE
+                    jsonb_build_object(
+                        SPLIT_PART(_r.path::text, '.', -1), _tmp)
+            END;
     END LOOP;
 
-    /* Follow templ / templ_key redirects */
-    IF _t.cmd IN ('templ', 'templ_key') THEN
-        RETURN fsql.render(_t.body, _t.jdata || _jchild);
-    END IF;
+    _jchild := jsonb_strip_nulls(_jchild);
 
-    /* Render the template body with all data merged */
+    /* ---- render parent body (NO execute) ---- */
     RETURN fsql._c_render(
         coalesce(_t.body, ''),
         _t.jdata || _jchild);
@@ -53,5 +92,5 @@ END;
 $$;
 
 COMMENT ON FUNCTION fsql.render IS
-'Render a template to SQL text without executing it (dry-run). '
-'Useful for previewing generated SQL.';
+'Dry-run: execute children to resolve dependencies, then render '
+'the parent SQL as text without executing it. Shows what run() would execute.';

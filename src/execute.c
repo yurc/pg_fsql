@@ -158,8 +158,8 @@ fsql_c_execute(PG_FUNCTION_ARGS)
         }
 
         /* Copy datum out of SPI memory context before SPI_finish */
-        attbyval = SPI_tuptable->tupdesc->attrs[0].attbyval;
-        attlen   = SPI_tuptable->tupdesc->attrs[0].attlen;
+        attbyval = TupleDescAttr(SPI_tuptable->tupdesc, 0)->attbyval;
+        attlen   = TupleDescAttr(SPI_tuptable->tupdesc, 0)->attlen;
         result   = SPI_datumTransfer(result, attbyval, attlen);
     }
     else
